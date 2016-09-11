@@ -1,0 +1,8 @@
+[package]
+name = "randomforest-demo"
+version = "0.1.0"
+authors = ["Phil Ellison <phil.j.ellison@gmail.com>"]
+
+[dependencies]
+image = "0.10.3"
+imageproc = { git = "https://github.com/PistonDevelopers/imageproc.git" }
