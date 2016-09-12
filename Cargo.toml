@@ -6,4 +6,5 @@ authors = ["Phil Ellison <phil.j.ellison@gmail.com>"]
 [dependencies]
 image = "0.10.3"
 imageproc = { git = "https://github.com/PistonDevelopers/imageproc.git" }
+rand = "0.3.14"
 randomforest = { path = "../randomforest" }

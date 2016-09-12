@@ -1,11 +1,13 @@
 
 extern crate image;
 extern crate imageproc;
+extern crate rand;
 extern crate randomforest;
 
 use std::path::Path;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use rand::{Rng, thread_rng, ThreadRng};
 
 use std::f64;
 use image::{Rgb, RgbImage};
@@ -131,9 +133,17 @@ fn create_dataset(trans: &Transformer, input: &Labelled<Rgb<u8>, (f64, f64)>) ->
 
 fn train_forest(trans: &Transformer,
                 params: ForestParameters,
-                input: &Labelled<Rgb<u8>, (f64, f64)>) -> Forest {
+                input: &Labelled<Rgb<u8>, (f64, f64)>) -> Forest<Stump> {
     let data = create_dataset(trans, input);
-    Forest::train(params, &data)
+
+    let mut generator = StumpGenerator {
+        rng: thread_rng(),
+        num_dims: data.data[0].len(),
+        min_thresh: 0f64,
+        max_thresh: 1f64
+    };
+
+    Forest::train(params, &mut generator, &data)
 }
 
 fn blend(dist: &Distribution, trans: &Transformer) -> Rgb<u8> {
