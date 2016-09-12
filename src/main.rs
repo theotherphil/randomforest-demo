@@ -130,13 +130,10 @@ fn create_dataset(trans: &Transformer, input: &Labelled<Rgb<u8>, (f64, f64)>) ->
 }
 
 fn train_forest(trans: &Transformer,
-                num_trees: usize,
-                depth: usize,
-                num_classes: usize,
-                num_candidates: usize,
+                params: ForestParameters,
                 input: &Labelled<Rgb<u8>, (f64, f64)>) -> Forest {
     let data = create_dataset(trans, input);
-    Forest::train(num_trees, depth, num_classes, num_candidates, &data)
+    Forest::train(params, &data)
 }
 
 fn blend(dist: &Distribution, trans: &Transformer) -> Rgb<u8> {
@@ -169,22 +166,24 @@ fn main() {
     // Transforms between image coordinates/colours and [0, 1]/indices
     let trans = Transformer::create(image.width(), image.height(), &labelled);
 
-    let num_trees = 200usize;
-    let depth = 3usize;
     let num_classes = labelled
         .labels
         .iter()
         .fold(HashSet::new(), |mut acc, l| { acc.insert(l); acc })
         .len();
 
-    let num_candidates = 500usize;
+    let params = ForestParameters {
+        num_trees: 200usize,
+        depth: 3usize,
+        num_classes: labelled
+            .labels
+            .iter()
+            .fold(HashSet::new(), |mut acc, l| { acc.insert(l); acc })
+            .len(),
+        num_candidates: 500usize
+    };
 
-    let forest = train_forest(&trans,
-                              num_trees,
-                              depth,
-                              num_classes,
-                              num_candidates,
-                              &labelled);
+    let forest = train_forest(&trans, params, &labelled);
 
     println!("trained forest");
 
@@ -193,8 +192,6 @@ fn main() {
 
     for y in 0..image.height() {
         for x in 0..image.width() {
-            println!("classifying {:?}", (x, y));
-
             let p = vec![x as f64 * trans.scale_factor, y as f64 * trans.scale_factor];
             let dist = forest.classify(&p);
             classified.put_pixel(x, y, blend(&dist, &trans));
@@ -204,7 +201,6 @@ fn main() {
                 .iter()
                 .fold(0f64, |acc, p| if *p > 0f64 { acc - p * p.log2() } else { acc });
 
-            println!("entropy: {:?}", entropy);
             let level = (255f64 * entropy / (num_classes as f64).log2()) as u8;
             confidence.put_pixel(x, y, Rgb([level, level, level]))
         }
