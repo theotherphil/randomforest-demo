@@ -5,6 +5,7 @@ extern crate randomforest;
 
 use std::path::Path;
 use std::collections::HashMap;
+use std::collections::HashSet;
 
 use std::f64;
 use image::{Rgb, RgbImage};
@@ -107,9 +108,7 @@ impl Transformer {
     }
 }
 
-fn create_dataset(width: u32, height: u32, input: &Labelled<Rgb<u8>, (f64, f64)>) -> Dataset {
-    let trans = Transformer::create(width, height, input);
-
+fn create_dataset(trans: &Transformer, input: &Labelled<Rgb<u8>, (f64, f64)>) -> Dataset {
     let mut labels = vec![];
     let mut data = vec![];
 
@@ -130,42 +129,71 @@ fn create_dataset(width: u32, height: u32, input: &Labelled<Rgb<u8>, (f64, f64)>
     }
 }
 
-fn train_forest(width: u32,
-                height: u32,
+fn train_forest(trans: &Transformer,
                 num_trees: usize,
                 depth: usize,
                 num_classes: usize,
                 num_candidates: usize,
                 input: &Labelled<Rgb<u8>, (f64, f64)>) -> Forest {
-    let data = create_dataset(width, height, input);
+    let data = create_dataset(trans, input);
     Forest::train(num_trees, depth, num_classes, num_candidates, &data)
 }
 
+fn blend(dist: &Distribution, trans: &Transformer) -> Rgb<u8> {
+    let mut pix = vec![0f64, 0f64, 0f64];
+    for i in 0..dist.probs.len() {
+        let prob = dist.probs[i];
+        let colour = trans.index_to_colour[&i];
+
+        pix[0] += colour.data[0] as f64 * prob;
+        pix[1] += colour.data[1] as f64 * prob;
+        pix[2] += colour.data[2] as f64 * prob;
+    }
+    Rgb([pix[0] as u8, pix[1] as u8, pix[2] as u8])
+}
+
 fn main() {
-    let source_path = Path::new("./src/four-class-spiral.png");
-    let target_path = Path::new("./src/centres.png");
+    let source_path = Path::new("./src/2.3.png");
+    let centres_path = Path::new("./src/centres.png");
+    let classified_path = Path::new("./src/classified.png");
 
     let image = load_image_or_panic(&source_path).to_rgb();
     let labelled = create_labelled_data(&image);
     let crosses = draw_labelled_data(&labelled, image.width(), image.height());
-    let _ = crosses.save(target_path);
+    let _ = crosses.save(centres_path);
 
-    let num_trees = 50usize;
+    // Transforms between image coordinates/colours and [0, 1]/indices
+    let trans = Transformer::create(image.width(), image.height(), &labelled);
+
+    let num_trees = 200usize;
     let depth = 3usize;
-    let num_classes = 4usize;
+    let num_classes = labelled
+        .labels
+        .iter()
+        .fold(HashSet::new(), |mut acc, l| { acc.insert(l); acc })
+        .len();
+
     let num_candidates = 500usize;
 
-    let forest = train_forest(image.width(),
-                              image.height(),
+    let forest = train_forest(&trans,
                               num_trees,
                               depth,
                               num_classes,
                               num_candidates,
                               &labelled);
 
-    // TODO: classify every point in the image, and colour is based on forest.classify
-    let p = vec![50f64, 50f64];
-    let dist = forest.classify(&p);
+    println!("trained forest");
 
-    println!("{:?}", dist);
+    let mut classified = RgbImage::new(image.width(), image.height());
+
+    for y in 0..image.height() {
+        for x in 0..image.width() {
+            println!("classifying {:?}", (x, y));
+            let p = vec![x as f64 * trans.scale_factor, y as f64 * trans.scale_factor];
+            let dist = forest.classify(&p);
+            classified.put_pixel(x, y, blend(&dist, &trans));
+        }
+    }
+
+    let _ = classified.save(classified_path);
 }
