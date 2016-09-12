@@ -175,11 +175,7 @@ fn main() {
     let params = ForestParameters {
         num_trees: 200usize,
         depth: 3usize,
-        num_classes: labelled
-            .labels
-            .iter()
-            .fold(HashSet::new(), |mut acc, l| { acc.insert(l); acc })
-            .len(),
+        num_classes: num_classes,
         num_candidates: 500usize
     };
 
