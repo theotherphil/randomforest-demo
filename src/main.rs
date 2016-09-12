@@ -13,7 +13,7 @@ use imageproc::utils::load_image_or_panic;
 use imageproc::definitions::HasWhite;
 use imageproc::drawing::draw_cross_mut;
 use imageproc::regionlabelling::{connected_components, Connectivity};
-use randomforest::{Dataset, Distribution, Forest};
+use randomforest::*;
 
 /// Labelled data. labels and data have each equal length and
 /// labels[i] is the label for data[i].
@@ -152,10 +152,14 @@ fn blend(dist: &Distribution, trans: &Transformer) -> Rgb<u8> {
     Rgb([pix[0] as u8, pix[1] as u8, pix[2] as u8])
 }
 
+// leaf distributions aren't weighted by number of training samples
+// of a given class. should they be?
+
 fn main() {
     let source_path = Path::new("./src/2.3.png");
     let centres_path = Path::new("./src/centres.png");
-    let classified_path = Path::new("./src/classified.png");
+    let classified_path = Path::new("./src/classification.png");
+    let confidence_path = Path::new("./src/confidence.png");
 
     let image = load_image_or_panic(&source_path).to_rgb();
     let labelled = create_labelled_data(&image);
@@ -185,15 +189,27 @@ fn main() {
     println!("trained forest");
 
     let mut classified = RgbImage::new(image.width(), image.height());
+    let mut confidence = RgbImage::new(image.width(), image.height());
 
     for y in 0..image.height() {
         for x in 0..image.width() {
             println!("classifying {:?}", (x, y));
+
             let p = vec![x as f64 * trans.scale_factor, y as f64 * trans.scale_factor];
             let dist = forest.classify(&p);
             classified.put_pixel(x, y, blend(&dist, &trans));
+
+            let entropy = dist
+                .probs
+                .iter()
+                .fold(0f64, |acc, p| if *p > 0f64 { acc - p * p.log2() } else { acc });
+
+            println!("entropy: {:?}", entropy);
+            let level = (255f64 * entropy / (num_classes as f64).log2()) as u8;
+            confidence.put_pixel(x, y, Rgb([level, level, level]))
         }
     }
 
     let _ = classified.save(classified_path);
+    let _ = confidence.save(confidence_path);
 }
