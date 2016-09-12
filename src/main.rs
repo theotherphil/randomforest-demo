@@ -152,8 +152,21 @@ fn blend(dist: &Distribution, trans: &Transformer) -> Rgb<u8> {
 // leaf distributions aren't weighted by number of training samples
 // of a given class. should they be?
 
+fn create_forest_parameters(labelled: &Labelled<Rgb<u8>, (f64, f64)>) -> ForestParameters {
+    ForestParameters {
+        num_trees: 200usize,
+        depth: 9usize,
+        num_classes: labelled
+            .labels
+            .iter()
+            .fold(HashSet::new(), |mut acc, l| { acc.insert(l); acc })
+            .len(),
+        num_candidates: 500usize
+    }
+}
+
 fn main() {
-    let source_path = Path::new("./src/2.3.png");
+    let source_path = Path::new("./src/dags.png");
     let centres_path = Path::new("./src/centres.png");
     let classified_path = Path::new("./src/classification.png");
     let confidence_path = Path::new("./src/confidence.png");
@@ -166,19 +179,7 @@ fn main() {
     // Transforms between image coordinates/colours and [0, 1]/indices
     let trans = Transformer::create(image.width(), image.height(), &labelled);
 
-    let num_classes = labelled
-        .labels
-        .iter()
-        .fold(HashSet::new(), |mut acc, l| { acc.insert(l); acc })
-        .len();
-
-    let params = ForestParameters {
-        num_trees: 200usize,
-        depth: 3usize,
-        num_classes: num_classes,
-        num_candidates: 500usize
-    };
-
+    let params = create_forest_parameters(&labelled);
     let forest = train_forest(&trans, params, &labelled);
 
     println!("trained forest");
@@ -197,7 +198,7 @@ fn main() {
                 .iter()
                 .fold(0f64, |acc, p| if *p > 0f64 { acc - p * p.log2() } else { acc });
 
-            let level = (255f64 * entropy / (num_classes as f64).log2()) as u8;
+            let level = (255f64 * entropy / (params.num_classes as f64).log2()) as u8;
             confidence.put_pixel(x, y, Rgb([level, level, level]))
         }
     }
