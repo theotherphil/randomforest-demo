@@ -131,12 +131,27 @@ fn create_dataset(trans: &Transformer, input: &Labelled<Rgb<u8>, (f64, f64)>) ->
     }
 }
 
-fn train_forest(trans: &Transformer,
+fn train_stump_forest(trans: &Transformer,
                 params: ForestParameters,
                 input: &Labelled<Rgb<u8>, (f64, f64)>) -> Forest<Stump> {
     let data = create_dataset(trans, input);
 
     let mut generator = StumpGenerator {
+        rng: thread_rng(),
+        num_dims: data.data[0].len(),
+        min_thresh: 0f64,
+        max_thresh: 1f64
+    };
+
+    Forest::train(params, &mut generator, &data)
+}
+
+fn train_plane_forest(trans: &Transformer,
+                params: ForestParameters,
+                input: &Labelled<Rgb<u8>, (f64, f64)>) -> Forest<Plane> {
+    let data = create_dataset(trans, input);
+
+    let mut generator = PlaneGenerator {
         rng: thread_rng(),
         num_dims: data.data[0].len(),
         min_thresh: 0f64,
@@ -176,7 +191,8 @@ fn create_forest_parameters(labelled: &Labelled<Rgb<u8>, (f64, f64)>) -> ForestP
 }
 
 fn main() {
-    let source_path = Path::new("./src/dags.png");
+    //let source_path = Path::new("./src/four-class-spiral.png");
+    let source_path = Path::new("./src/cazzo.png");
     let centres_path = Path::new("./src/centres.png");
     let classified_path = Path::new("./src/classification.png");
     let confidence_path = Path::new("./src/confidence.png");
@@ -190,7 +206,8 @@ fn main() {
     let trans = Transformer::create(image.width(), image.height(), &labelled);
 
     let params = create_forest_parameters(&labelled);
-    let forest = train_forest(&trans, params, &labelled);
+    //let forest = train_stump_forest(&trans, params, &labelled);
+    let forest = train_plane_forest(&trans, params, &labelled);
 
     println!("trained forest");
 
