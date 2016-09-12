@@ -1,17 +1,20 @@
 
 extern crate image;
 extern crate imageproc;
+extern crate randomforest;
 
 use std::path::Path;
 use std::collections::HashMap;
 
+use std::f64;
 use image::{Rgb, RgbImage};
 use imageproc::utils::load_image_or_panic;
 use imageproc::definitions::HasWhite;
 use imageproc::drawing::draw_cross_mut;
 use imageproc::regionlabelling::{connected_components, Connectivity};
+use randomforest::{Dataset, Distribution, Forest};
 
-/// Labelled data. labels and data have each equal and
+/// Labelled data. labels and data have each equal length and
 /// labels[i] is the label for data[i].
 struct Labelled<L, D> {
     labels: Vec<L>,
@@ -73,12 +76,96 @@ fn draw_labelled_data(data: &Labelled<Rgb<u8>, (f64, f64)>, width: u32, height: 
     crosses
 }
 
+struct Transformer {
+    // Uses to scale image input data to [0, 1]
+    scale_factor: f64,
+    // Maps image colour to index
+    colour_to_index: HashMap<Rgb<u8>, usize>,
+    // Maps index to image colour
+    index_to_colour: HashMap<usize, Rgb<u8>>
+}
+
+impl Transformer {
+    fn create(width: u32, height: u32, data: &Labelled<Rgb<u8>, (f64, f64)>) -> Transformer {
+        let mut colour_to_index = HashMap::new();
+        let mut index_to_colour = HashMap::new();
+
+        for &l in data.labels.iter() {
+            if colour_to_index.contains_key(&l) {
+                continue;
+            }
+            let index = colour_to_index.len();
+            colour_to_index.insert(l, index);
+            index_to_colour.insert(index, l);
+        }
+
+        Transformer {
+            scale_factor: 1.0 / f64::max(width as f64, height as f64),
+            colour_to_index: colour_to_index,
+            index_to_colour: index_to_colour
+        }
+    }
+}
+
+fn create_dataset(width: u32, height: u32, input: &Labelled<Rgb<u8>, (f64, f64)>) -> Dataset {
+    let trans = Transformer::create(width, height, input);
+
+    let mut labels = vec![];
+    let mut data = vec![];
+
+    for i in 0..input.labels.len() {
+        let l = input.labels[i];
+        let d = input.data[i];
+
+        let idx = trans.colour_to_index[&l];
+        let scaled = vec![d.0 * trans.scale_factor, d.1 * trans.scale_factor];
+
+        labels.push(idx);
+        data.push(scaled);
+    }
+
+    Dataset {
+        labels: labels,
+        data: data
+    }
+}
+
+fn train_forest(width: u32,
+                height: u32,
+                num_trees: usize,
+                depth: usize,
+                num_classes: usize,
+                num_candidates: usize,
+                input: &Labelled<Rgb<u8>, (f64, f64)>) -> Forest {
+    let data = create_dataset(width, height, input);
+    Forest::train(num_trees, depth, num_classes, num_candidates, &data)
+}
+
 fn main() {
-    let source_path = Path::new("./src/grid.png");
+    let source_path = Path::new("./src/four-class-spiral.png");
     let target_path = Path::new("./src/centres.png");
 
     let image = load_image_or_panic(&source_path).to_rgb();
     let labelled = create_labelled_data(&image);
     let crosses = draw_labelled_data(&labelled, image.width(), image.height());
     let _ = crosses.save(target_path);
+
+    let num_trees = 50usize;
+    let depth = 3usize;
+    let num_classes = 4usize;
+    let num_candidates = 500usize;
+
+    let forest = train_forest(image.width(),
+                              image.height(),
+                              num_trees,
+                              depth,
+                              num_classes,
+                              num_candidates,
+                              &labelled);
+
+    // TODO: classify every point in the image, and colour is based on forest.classify
+    let p = vec![50f64, 50f64];
+    let dist = forest.classify(&p);
+
+    println!("{:?}", dist);
 }
