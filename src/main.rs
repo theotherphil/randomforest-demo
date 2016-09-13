@@ -16,6 +16,8 @@ use imageproc::definitions::HasWhite;
 use imageproc::drawing::draw_cross_mut;
 use imageproc::regionlabelling::{connected_components, Connectivity};
 use randomforest::*;
+use randomforest::stump::*;
+use randomforest::hyperplane::*;
 
 /// Labelled data. labels and data have each equal length and
 /// labels[i] is the label for data[i].
