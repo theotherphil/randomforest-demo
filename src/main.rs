@@ -218,7 +218,7 @@ enum ClassifierType {
 }
 
 struct Settings {
-    forestParams: ForestParameters,
+    forest_params: ForestParameters,
     classifier: ClassifierType
 }
 
@@ -227,10 +227,13 @@ fn train_forest(settings: Settings,
                 labelled: &ColouredPoints)
                 -> Box<ForestClassifier> {
     match settings.classifier {
-        ClassifierType::Stump => train_stump_forest(trans, settings.forestParams, &labelled),
-        ClassifierType::Plane => train_plane_forest(trans, settings.forestParams, &labelled)
+        ClassifierType::Stump => train_stump_forest(trans, settings.forest_params, &labelled),
+        ClassifierType::Plane => train_plane_forest(trans, settings.forest_params, &labelled)
     }
 }
+
+// TODO: render data points with black borders on top of the predictions
+// TODO: image and optionally the entropy one
 
 fn main() {
     let source_path = Path::new("./src/four-class-spiral.png");
@@ -249,7 +252,7 @@ fn main() {
 
     let settings = Settings {
         classifier: ClassifierType::Plane,
-        forestParams: create_forest_parameters()
+        forest_params: create_forest_parameters()
     };
 
     let forest = train_forest(settings, &trans, &labelled);
