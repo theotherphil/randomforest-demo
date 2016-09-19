@@ -17,11 +17,15 @@ use imageproc::drawing::draw_cross_mut;
 use imageproc::regionlabelling::{connected_components, Connectivity};
 use randomforest::*;
 use randomforest::stump::*;
+use randomforest::dataset::*;
+use randomforest::distribution::*;
+use randomforest::entropy::*;
 use randomforest::hyperplane::*;
 
 /// Labelled data. labels and data have each equal length and
 /// labels[i] is the label for data[i].
 struct Labelled<L, D> {
+    num_classes: usize,
     labels: Vec<L>,
     data: Vec<D>
 }
@@ -65,7 +69,13 @@ fn create_labelled_data(image: &RgbImage) -> Labelled<Rgb<u8>, (f64, f64)> {
         colours.push(*colour);
     }
 
+    let num_classes= colours
+        .iter()
+        .fold(HashSet::new(), |mut acc, l| { acc.insert(l); acc })
+        .len();
+
     Labelled {
+        num_classes: num_classes,
         labels: colours,
         data: centres
     }
@@ -128,6 +138,7 @@ fn create_dataset(trans: &Transformer, input: &Labelled<Rgb<u8>, (f64, f64)>) ->
     }
 
     Dataset {
+        num_classes: input.num_classes,
         labels: labels,
         data: data
     }
@@ -135,7 +146,7 @@ fn create_dataset(trans: &Transformer, input: &Labelled<Rgb<u8>, (f64, f64)>) ->
 
 fn train_stump_forest(trans: &Transformer,
                 params: ForestParameters,
-                input: &Labelled<Rgb<u8>, (f64, f64)>) -> Forest<Stump> {
+                input: &Labelled<Rgb<u8>, (f64, f64)>) -> Forest<Stump, Distribution> {
     let data = create_dataset(trans, input);
 
     let mut generator = StumpGenerator {
@@ -145,12 +156,12 @@ fn train_stump_forest(trans: &Transformer,
         max_thresh: 1f64
     };
 
-    Forest::train(params, &mut generator, &data)
+    Forest::train::<StumpGenerator, WeightedEntropyDrop>(params, &mut generator, &data)
 }
 
 fn train_plane_forest(trans: &Transformer,
                 params: ForestParameters,
-                input: &Labelled<Rgb<u8>, (f64, f64)>) -> Forest<Plane> {
+                input: &Labelled<Rgb<u8>, (f64, f64)>) -> Forest<Plane, Distribution> {
     let data = create_dataset(trans, input);
 
     let mut generator = PlaneGenerator {
@@ -160,7 +171,7 @@ fn train_plane_forest(trans: &Transformer,
         max_thresh: 1f64
     };
 
-    Forest::train(params, &mut generator, &data)
+    Forest::train::<PlaneGenerator, WeightedEntropyDrop>(params, &mut generator, &data)
 }
 
 fn blend(dist: &Distribution, trans: &Transformer) -> Rgb<u8> {
@@ -183,18 +194,13 @@ fn create_forest_parameters(labelled: &Labelled<Rgb<u8>, (f64, f64)>) -> ForestP
     ForestParameters {
         num_trees: 200usize,
         depth: 9usize,
-        num_classes: labelled
-            .labels
-            .iter()
-            .fold(HashSet::new(), |mut acc, l| { acc.insert(l); acc })
-            .len(),
         num_candidates: 500usize
     }
 }
 
 fn main() {
-    //let source_path = Path::new("./src/four-class-spiral.png");
-    let source_path = Path::new("./src/cazzo.png");
+    let source_path = Path::new("./src/four-class-spiral.png");
+    //let source_path = Path::new("./src/cazzo.png");
     let centres_path = Path::new("./src/centres.png");
     let classified_path = Path::new("./src/classification.png");
     let confidence_path = Path::new("./src/confidence.png");
@@ -227,7 +233,7 @@ fn main() {
                 .iter()
                 .fold(0f64, |acc, p| if *p > 0f64 { acc - p * p.log2() } else { acc });
 
-            let level = (255f64 * entropy / (params.num_classes as f64).log2()) as u8;
+            let level = (255f64 * entropy / (labelled.num_classes as f64).log2()) as u8;
             confidence.put_pixel(x, y, Rgb([level, level, level]))
         }
     }
