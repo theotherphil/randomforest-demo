@@ -30,9 +30,11 @@ struct Labelled<L, D> {
     data: Vec<D>
 }
 
+type ColouredPoints = Labelled<Rgb<u8>, (f64, f64)>;
+
 /// All non-white connected components are treated as data points. Returns the colour
 /// and centre of mass of each component.
-fn create_labelled_data(image: &RgbImage) -> Labelled<Rgb<u8>, (f64, f64)> {
+fn create_labelled_data(image: &RgbImage) -> ColouredPoints {
     let ccs = connected_components(image, Connectivity::Eight, Rgb::white());
     let mut elements: HashMap<u32, Vec<(u32, u32)>> = HashMap::new();
     let (width, height) = image.dimensions();
@@ -81,7 +83,7 @@ fn create_labelled_data(image: &RgbImage) -> Labelled<Rgb<u8>, (f64, f64)> {
     }
 }
 
-fn draw_labelled_data(data: &Labelled<Rgb<u8>, (f64, f64)>, width: u32, height: u32)-> RgbImage {
+fn draw_labelled_data(data: &ColouredPoints, width: u32, height: u32)-> RgbImage {
     let mut crosses = RgbImage::from_raw(width, height, vec![255; (width * height * 3) as usize]).unwrap();
 
     for i in 0..data.labels.len() {
@@ -101,7 +103,7 @@ struct Transformer {
 }
 
 impl Transformer {
-    fn create(width: u32, height: u32, data: &Labelled<Rgb<u8>, (f64, f64)>) -> Transformer {
+    fn create(width: u32, height: u32, data: &ColouredPoints) -> Transformer {
         let mut colour_to_index = HashMap::new();
         let mut index_to_colour = HashMap::new();
 
@@ -122,7 +124,7 @@ impl Transformer {
     }
 }
 
-fn create_dataset(trans: &Transformer, input: &Labelled<Rgb<u8>, (f64, f64)>) -> Dataset {
+fn create_dataset(trans: &Transformer, input: &ColouredPoints) -> Dataset {
     let mut labels = vec![];
     let mut data = vec![];
 
@@ -144,9 +146,19 @@ fn create_dataset(trans: &Transformer, input: &Labelled<Rgb<u8>, (f64, f64)>) ->
     }
 }
 
+trait ForestClassifier {
+    fn classify(&self, sample: &Vec<f64>) -> Distribution;
+}
+
+impl<C: Classifier + Default + Clone> ForestClassifier for Forest<C, Distribution> {
+    fn classify(&self, sample: &Vec<f64>) -> Distribution {
+        self.classify(sample)
+    }
+}
+
 fn train_stump_forest(trans: &Transformer,
                 params: ForestParameters,
-                input: &Labelled<Rgb<u8>, (f64, f64)>) -> Forest<Stump, Distribution> {
+                input: &ColouredPoints) -> Box<ForestClassifier> {
     let data = create_dataset(trans, input);
 
     let mut generator = StumpGenerator {
@@ -156,12 +168,13 @@ fn train_stump_forest(trans: &Transformer,
         max_thresh: 1f64
     };
 
-    Forest::train::<StumpGenerator, WeightedEntropyDrop>(params, &mut generator, &data)
+    let forest = Forest::train::<StumpGenerator, WeightedEntropyDrop>(params, &mut generator, &data);
+    Box::new(forest)
 }
 
 fn train_plane_forest(trans: &Transformer,
                 params: ForestParameters,
-                input: &Labelled<Rgb<u8>, (f64, f64)>) -> Forest<Plane, Distribution> {
+                input: &ColouredPoints) -> Box<ForestClassifier> {
     let data = create_dataset(trans, input);
 
     let mut generator = PlaneGenerator {
@@ -171,7 +184,8 @@ fn train_plane_forest(trans: &Transformer,
         max_thresh: 1f64
     };
 
-    Forest::train::<PlaneGenerator, WeightedEntropyDrop>(params, &mut generator, &data)
+    let forest = Forest::train::<PlaneGenerator, WeightedEntropyDrop>(params, &mut generator, &data);
+    Box::new(forest)
 }
 
 fn blend(dist: &Distribution, trans: &Transformer) -> Rgb<u8> {
@@ -190,11 +204,31 @@ fn blend(dist: &Distribution, trans: &Transformer) -> Rgb<u8> {
 // leaf distributions aren't weighted by number of training samples
 // of a given class. should they be?
 
-fn create_forest_parameters(labelled: &Labelled<Rgb<u8>, (f64, f64)>) -> ForestParameters {
+fn create_forest_parameters() -> ForestParameters {
     ForestParameters {
         num_trees: 200usize,
         depth: 9usize,
         num_candidates: 500usize
+    }
+}
+
+enum ClassifierType {
+    Stump,
+    Plane
+}
+
+struct Settings {
+    forestParams: ForestParameters,
+    classifier: ClassifierType
+}
+
+fn train_forest(settings: Settings,
+                trans: &Transformer,
+                labelled: &ColouredPoints)
+                -> Box<ForestClassifier> {
+    match settings.classifier {
+        ClassifierType::Stump => train_stump_forest(trans, settings.forestParams, &labelled),
+        ClassifierType::Plane => train_plane_forest(trans, settings.forestParams, &labelled)
     }
 }
 
@@ -213,9 +247,12 @@ fn main() {
     // Transforms between image coordinates/colours and [0, 1]/indices
     let trans = Transformer::create(image.width(), image.height(), &labelled);
 
-    let params = create_forest_parameters(&labelled);
-    //let forest = train_stump_forest(&trans, params, &labelled);
-    let forest = train_plane_forest(&trans, params, &labelled);
+    let settings = Settings {
+        classifier: ClassifierType::Plane,
+        forestParams: create_forest_parameters()
+    };
+
+    let forest = train_forest(settings, &trans, &labelled);
 
     println!("trained forest");
 
