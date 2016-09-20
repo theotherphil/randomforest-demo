@@ -12,8 +12,10 @@ Finds the connected components of non-white pixels in an input image, creates a 
 ## Centres of connected components
 ![Alt text](/data/centres.png?raw=true "Dataset")
 
-## Predictions
+## Predictions 
 ![Alt text](/data/classification.png?raw=true "Predictions")
+
+(200 trees, 500 candidate classifiers per node, tree depth 9, hyperplane classifiers)
 
 ## Entropy
 ![Alt text](/data/confidence.png?raw=true "Entropy")
