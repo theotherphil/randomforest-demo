@@ -12,8 +12,8 @@ use rand::{Rng, thread_rng, ThreadRng};
 use std::f64;
 use image::{Rgb, RgbImage};
 use imageproc::utils::load_image_or_panic;
-use imageproc::definitions::HasWhite;
-use imageproc::drawing::draw_cross_mut;
+use imageproc::definitions::{HasWhite, HasBlack};
+use imageproc::drawing::{draw_cross_mut, draw_filled_circle_mut};
 use imageproc::regionlabelling::{connected_components, Connectivity};
 use randomforest::*;
 use randomforest::stump::*;
@@ -232,9 +232,6 @@ fn train_forest(settings: Settings,
     }
 }
 
-// TODO: render data points with black borders on top of the predictions
-// TODO: image and optionally the entropy one
-
 fn main() {
     let source_path = Path::new("./src/four-class-spiral.png");
     //let source_path = Path::new("./src/cazzo.png");
@@ -276,6 +273,18 @@ fn main() {
             let level = (255f64 * entropy / (labelled.num_classes as f64).log2()) as u8;
             confidence.put_pixel(x, y, Rgb([level, level, level]))
         }
+    }
+
+    for i in 0..labelled.labels.len() {
+        let colour = labelled.labels[i];
+        let centre = labelled.data[i];
+        let p = (centre.0 as i32, centre.1 as i32);
+
+        draw_filled_circle_mut(&mut classified, p, 4, Rgb::black());
+        draw_filled_circle_mut(&mut classified, p, 3, colour);
+
+        draw_filled_circle_mut(&mut confidence, p, 4, Rgb::black());
+        draw_filled_circle_mut(&mut confidence, p, 3, colour);
     }
 
     let _ = classified.save(classified_path);
