@@ -233,11 +233,10 @@ fn train_forest(settings: Settings,
 }
 
 fn main() {
-    let source_path = Path::new("./src/four-class-spiral.png");
-    //let source_path = Path::new("./src/cazzo.png");
-    let centres_path = Path::new("./src/centres.png");
-    let classified_path = Path::new("./src/classification.png");
-    let confidence_path = Path::new("./src/confidence.png");
+    let source_path = Path::new("./data/four-class-spiral.png");
+    let centres_path = Path::new("./data/centres.png");
+    let classified_path = Path::new("./data/classification.png");
+    let confidence_path = Path::new("./data/confidence.png");
 
     let image = load_image_or_panic(&source_path).to_rgb();
     let labelled = create_labelled_data(&image);
